@@ -1,5 +1,7 @@
 # ooo 안녕하세요
 # 23.09.04
+* 파이토치 프로그래밍 시작!
+* 공유에 필요한 정보
 * 오늘 배운 내용 
     * torch1 ~ torch6
     * 클래스, 상속(inheritance), 객체지향, 스페셜 메소드(special method), 생성자(constructor),오버라이딩 (overriding), 부모 자식, 깃허브, README 코드에 오늘 배운 내용 정리하는 법, torch, 판다스 불러오기, csv파일 불러오기, 텐서 생성
