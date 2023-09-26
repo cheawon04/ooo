@@ -1,5 +1,6 @@
 # ooo 안녕하세요
 # 23.09.04
+
 * 파이토치 프로그래밍 시작!
 * 공유에 필요한 정보
 * 오늘 배운 내용 
@@ -248,3 +249,6 @@ class ImageTransform():
 * *flask-sqlalchemy
 * flask-migrate
 * flask-wtf
+
+# 23.09.18
+* 오늘 배운 내용

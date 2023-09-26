@@ -1,26 +1,35 @@
-import cv2
-import matplotlib.pyplot as plt
-import os
+# 1 번 셀 --------------------------------
+# import copy
+# import shutil
+# import glob
+# import numpy as np
+# from torchvision.transforms import ToTensor
+# import torchvision.models as models
+
 import pandas as pd
-from PIL import Image
-import random
 import time
 import torch
-import torch.nn as nn
+import torchvision
+from torch.utils.data import DataLoader, Dataset
+import torchvision.transforms as transforms
+from torch.autograd import Variable
+import torch.optim as optim
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
+import torch.nn as nn
+import os
+import cv2
+from PIL import Image
+
+# from tqdm.notebook import tqdm_notebook
+from tqdm import tqdm
+import random
+import matplotlib.pyplot as plt
 from torchsummary import summary
-from torchvision import transforms
-from torchvision.transforms import ToTensor
-import tqdm.notebook as tqdm
 
-# 'a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z'
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-
-# 이미지 데이터셋 전처리
+# 2 번 셀 --------------------------------
 class ImageTransform:
     def __init__(self, resize, mean, std):
         self.data_transform = {
@@ -32,7 +41,7 @@ class ImageTransform:
                     transforms.Normalize(mean, std),
                 ]
             ),
-            "validate": transforms.Compose(
+            "val": transforms.Compose(
                 [
                     transforms.Resize(256),
                     transforms.CenterCrop(resize),
@@ -46,57 +55,58 @@ class ImageTransform:
         return self.data_transform[phase](img)
 
 
-# 이미지 데이터셋을 불러온 후, 룬련, 검증, 테스트 로 분리
-cat_dir = r"./data/dogs_vs_cat/Cat/"
-dog_dir = r"./data/dogs_vs_cat/Dog/"
+# 3 번 셀 --------------------------------
+cat_directory = r"C:\chungnam_chatbot\pytorch\data\dogs-vs-cats\Cat"
+dog_directory = r"C:\chungnam_chatbot\pytorch\data\dogs-vs-cats\Dog"
 
-cat_images_filepaths = sorted([os.path.join(cat_dir, f) for f in os.listdir(cat_dir)])
-dog_images_filepaths = sorted([os.path.join(dog_dir, f) for f in os.listdir(dog_dir)])
+cat_images_filepaths = sorted(
+    [os.path.join(cat_directory, f) for f in os.listdir(cat_directory)]
+)
+dog_images_filepaths = sorted(
+    [os.path.join(dog_directory, f) for f in os.listdir(dog_directory)]
+)
+
+# [[], []] -> [....]
+# cat_images_filepaths.extend(dog_images_filepaths)
 images_filepaths = [*cat_images_filepaths, *dog_images_filepaths]
+
+# 에러 처리.
 correct_images_filepaths = [i for i in images_filepaths if cv2.imread(i) is not None]
 
 random.seed(42)
 random.shuffle(correct_images_filepaths)
-
-# 훈련용 0~399 번째 이미지
-train_images_filepath = correct_images_filepaths[:400]
-# 검증용 400~뒤에서 10번째
-validate_images_filepath = correct_images_filepaths[400:-10]
-# 테스트용 마지막 10개
-test_images_filepath = correct_images_filepaths[-10:]
-print(
-    len(train_images_filepath), len(validate_images_filepath), len(test_images_filepath)
-)
+train_image_filepaths = correct_images_filepaths[:400]
+val_image_filepaths = correct_images_filepaths[400:-10]
+test_image_filepaths = correct_images_filepaths[-10:]
+print(len(train_image_filepaths), len(val_image_filepaths), len(test_image_filepaths))
 
 
-# 테스트 데이터셋 이미지 확인 함수
-def display_image_grid(images_filepaths, predicted_labels=tuple(), col=5):
-    rows = len(images_filepaths) // col
-    figure, ax = plt.subplots(nrows=rows, ncols=col, figsize=(12, 6))
-    for idx, path in enumerate(images_filepaths):
-        image = cv2.imread(path)
+# 4 번 셀 --------------------------------
+def display_image_grid(images_filepaths, predicted_labels=(), cols=5):
+    rows = len(images_filepaths) // cols
+    figure, ax = plt.subplots(nrows=rows, ncols=cols, figsize=(12, 6))
+    for i, image_filepath in enumerate(images_filepaths):
+        image = cv2.imread(image_filepath)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        true_label = os.path.normpath(path).split(os.sep)[-2]
-        pred_label = predicted_labels[idx] if predicted_labels else true_label
-        color = "green" if true_label == pred_label else "red"
-        ax.ravel()[idx].imshow(image)
-        ax.ravel()[idx].set_title(pred_label, color=color)
-        ax.ravel()[idx].set_axis_off()
+        true_label = os.path.normpath(image_filepath).split(os.sep)[-2]
+        predicted_label = predicted_labels[i] if predicted_labels else true_label
+        color = "green" if true_label == predicted_label else "red"
+        ax.ravel()[i].imshow(image)
+        ax.ravel()[i].set_title(predicted_label, color=color)
+        ax.ravel()[i].set_axis_off()
     plt.tight_layout()
     plt.show()
 
 
-# 위의 함수를 이용하여 이미지 표시
-# display_image_grid(test_images_filepath)
-# display_image_grid(train_images_filepath)
-# display_image_grid(validate_images_filepath)
+display_image_grid(test_image_filepaths)
 
 
-# 이미지 데이터셋 클래스 정의
-class DogVSCatDataset(Dataset):
-    def __init__(self, file_list, transform=None, phase="train"):
+# 5 번 셀 --------------------------------
+class DogvsCatDataset(Dataset):
+    def __init__(self, file_list, tranform=None, phase="train") -> None:
+        super().__init__()
         self.file_list = file_list
-        self.transform = transform
+        self.transform = tranform
         self.phase = phase
 
     def __len__(self):
@@ -106,50 +116,49 @@ class DogVSCatDataset(Dataset):
         img_path = self.file_list[idx]
         img = Image.open(img_path)
         img_transformed = self.transform(img, self.phase)
-        label = img_path.split("/")[-1].split(".")[0]
-        if label == "Dog":
+        label = img_path.split("\\")[-1].split(".")[0]
+        if label == "dog":
             label = 1
-        elif label == "Cat":
+        elif label == "cat":
             label = 0
         return img_transformed, label
 
 
-# 기본 변수 정의
+# 6 번 셀 --------------------------------
 size = 224
 mean = (0.485, 0.456, 0.406)
 std = (0.229, 0.224, 0.225)
 batch_size = 32
 
-# 데이터셋 정의
-train_dataset = DogVSCatDataset(
-    train_images_filepath, transform=ImageTransform(size, mean, std), phase="train"
+train_dataset = DogvsCatDataset(
+    train_image_filepaths, tranform=ImageTransform(size, mean, std), phase="train"
 )
-validate_dataset = DogVSCatDataset(
-    validate_images_filepath,
-    transform=ImageTransform(size, mean, std),
-    phase="validate",
+
+val_dataset = DogvsCatDataset(
+    val_image_filepaths, tranform=ImageTransform(size, mean, std), phase="val"
 )
 index = 0
-print(train_dataset.__getitem__(index)[0].size())
-print(validate_dataset.__getitem__(index)[1])
+# print(train_dataset.__getitem__(index)[0].size())
+# print(train_dataset.__getitem__(index)[1])
+print(train_dataset[index][0].size())
+print(train_dataset[index][1])
 
 
-# 데이터로더 정의
+# 7 번 셀 --------------------------------
 train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-validate_dataloader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=False)
-dataloader_dict = {"train": train_dataloader, "validate": validate_dataloader}
+val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+dataloader_dict = {"train": train_dataloader, "val": val_dataloader}
 
 batch_iterator = iter(train_dataloader)
-img, label = batch_iterator._next_data()
-print(img.size())
+inputs, label = next(batch_iterator)
+print(inputs.size())
 print(label)
 
 
-# 모델의 네트워크 클래스
+# 8 번 셀 --------------------------------
 class LeNet(nn.Module):
     def __init__(self):
         super(LeNet, self).__init__()
-
         self.cnn1 = nn.Conv2d(
             in_channels=3, out_channels=16, kernel_size=5, stride=1, padding=0
         )
@@ -158,12 +167,11 @@ class LeNet(nn.Module):
         self.cnn2 = nn.Conv2d(
             in_channels=16, out_channels=32, kernel_size=5, stride=1, padding=0
         )
-        self.relu2 = nn.ReLU()
+        self.relu2 = nn.ReLU()  # activation
         self.maxpool2 = nn.MaxPool2d(kernel_size=2)
-
-        self.fc1 = nn.Linear(in_features=32 * 53 * 53, out_features=512)
+        self.fc1 = nn.Linear(89888, 512)  # 32*53*53
         self.relu5 = nn.ReLU()
-        self.fc2 = nn.Linear(in_features=512, out_features=2)
+        self.fc2 = nn.Linear(512, 2)
         self.output = nn.Softmax(dim=1)
 
     def forward(self, x):
@@ -180,105 +188,96 @@ class LeNet(nn.Module):
         return out
 
 
-# 모델 객체 생성
+# 9 번 셀 --------------------------------
 model = LeNet()
+model.to(device)
 print(model)
 
+# 10 번 셀 --------------------------------
 
-# torchsummar 를 이용해 모델의 네트워크 구조 확인
-summary(model, input_size=(3, 224, 224))
+# mat 갯수가 달라지는 애러 발생.
+# summary(model, input_size=(3, 244, 244))
 
 
-# 학습 가능하게 설정한 파라미터 수 확인
-def count_parameters(model):
+# 11 번 셀 --------------------------------
+def count_parameter(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-print(f"The model has {count_parameters(model):,} trainable parameters")
+print(f"The model has {count_parameter(model):,} trainable parameters")
 
-
-# 옵티마이저와 손실함수 정의
-optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+# 12 번 셀 ---------------------------------
+optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 criterion = nn.CrossEntropyLoss()
 
-# 연산 장치 할당
-model = model.to(device)
+model.to(device)
 criterion = criterion.to(device)
 
 
-# 모델 학습 함수
 def train_model(model, dataloader_dict, criterion, optimizer, num_epoch):
     since = time.time()
     best_acc = 0.0
 
     for epoch in range(num_epoch):
-        print("Epoch {}/{}".format(epoch + 1, num_epoch))
+        print(f"Epoch {epoch+1} / {num_epoch}")
         print("-" * 20)
 
-        for phase in ["train", "validate"]:
+        for phase in ["train", "val"]:
             if phase == "train":
                 model.train()
             else:
                 model.eval()
 
-            epoch_loss = 0
+            epoch_loss = 0.0
             epoch_corrects = 0
 
-            for img, lab in tqdm.tqdm_notebook(dataloader_dict[phase]):
-                img = img.to(device)
-                # tqdm 라이브러리가 멍청이가 되버려서 수동으로 str to int 변환
-                classes = {"cat": 0, "dog": 1}
-                lab = torch.tensor([classes[e] for e in lab])
-
-                # 역전파 단계 실행하기 전에 기울기를 0으로 초기화
+            # tqdm 실행 안됨.
+            for inputs, labels in tqdm(dataloader_dict[phase]):
+                inputs = inputs.to(device)
+                labels = labels.to(device)
                 optimizer.zero_grad()
 
                 with torch.set_grad_enabled(phase == "train"):
-                    outputs = model(img)
-                    _, pred = torch.max(outputs, 1)
-                    loss = criterion(outputs, lab)
+                    outputs = model(inputs)
+                    _, preds = torch.max(outputs, 1)
+                    loss = criterion(outputs, labels)
 
                     if phase == "train":
                         loss.backward()
                         optimizer.step()
 
-                    epoch_loss += loss.item() * img.size(0)
-                    epoch_corrects += torch.sum(pred == lab.data)
+                    epoch_loss += loss.item() * inputs.size(0)
+                    epoch_corrects += torch.sum(preds == labels.data)
 
             epoch_loss = epoch_loss / len(dataloader_dict[phase].dataset)
             epoch_acc = epoch_corrects.double() / len(dataloader_dict[phase].dataset)
-            print("{} Loss: {:.4f} Acc: {:.4f}".format(phase, epoch_loss, epoch_acc))
 
-            if phase == "validate" and epoch_acc > best_acc:
+            print(f"{phase} Loss: {epoch_loss} Acc: {epoch_acc}")
+
+            if phase == "val" and epoch_acc > best_acc:
                 best_acc = epoch_acc
                 best_model_wts = model.state_dict()
 
     time_elapsed = time.time() - since
-    print(
-        "Training complete in {:.0f}m {:.0f}s".format(
-            time_elapsed // 60, time_elapsed % 60
-        )
-    )
-    print("Best validate Acc: {:4f}".format(best_acc))
+    print(f"Training complete in {time_elapsed//60:.0f}m {time_elapsed % 60:.0f}s")
     return model
 
 
-# 모델 학습
-model = train_model(model, dataloader_dict, criterion, optimizer, 10)
+num_epoch = 10
+model = train_model(model, dataloader_dict, criterion, optimizer, num_epoch)
 
 
-# 모델 테스트
-id_list = list()
-pred_list = list()
+# 13 번 셀 ---------------------------------
+id_list = []
+pred_list = []
 _id = 0
 
-# 텐서들에 대한 변화도를 계산할 필요가 없다는 의미로, 훈련과 가장 큰 차이임
 with torch.no_grad():
-    for test_path in tqdm.tqdm_notebook(test_images_filepath):
+    for test_path in tqdm(test_image_filepaths):
         img = Image.open(test_path)
-        _id = test_path.split("/")[-1].split(".")[1]
+        _id = test_path.split("\\")[-1].split(".")[1]
         transform = ImageTransform(size, mean, std)
-        img = transform(img, phase="validate")
+        img = transform(img, phase="val")
         img = img.unsqueeze(0)
         img = img.to(device)
 
@@ -287,40 +286,40 @@ with torch.no_grad():
         preds = F.softmax(outputs, dim=1)[:, 1].tolist()
         id_list.append(_id)
         pred_list.append(preds[0])
+
 res = pd.DataFrame({"id": id_list, "label": pred_list})
 
 res.sort_values(by="id", inplace=True)
 res.reset_index(drop=True, inplace=True)
 
-res.to_csv("./data/LeNet.csv", index=False)
+res.to_csv(r"C:\chungnam_chatbot\pytorch\data", index=False)
+
+res.head()
+
+# 14 번 셀 ---------------------------------
+class_ = Classes = {0: "cat", 1: "dog"}
 
 
-classes = {0: "cat", 1: "dog"}
-
-
-# 테스트 데이터셋 이미지 출력 함수
-def display_test_image_grid(images_filepaths, predicted_labels=tuple(), col=5):
-    rows = len(images_filepaths) // col
-    figure, ax = plt.subplots(nrows=rows, ncols=col, figsize=(12, 6))
-    for idx, path in enumerate(images_filepaths):
-        image = cv2.imread(path)
+def display_image_grid2(images_filepaths, predicted_labels=(), cols=5):
+    rows = len(images_filepaths) // cols
+    figure, ax = plt.subplots(nrows=rows, ncols=cols, figsize=(12, 6))
+    for i, image_filepath in enumerate(images_filepaths):
+        image = cv2.imread(image_filepath)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        # true_label = os.path.normpath(image_filepath).split(os.sep)[-2]
+        # predicted_label = predicted_labels[i] if predicted_labels else true_label
+        # color = "green" if true_label == predicted_label else "red"
         a = random.choice(res["id"].values)
         label = res.loc[res["id"] == a, "label"].values[0]
         if label > 0.5:
             label = 1
         else:
             label = 0
-
-        true_label = os.path.normpath(path).split(os.sep)[-2].lower()
-        pred_label = classes[label]
-        color = "green" if true_label == pred_label else "red"
-
-        ax.ravel()[idx].imshow(image)
-        ax.ravel()[idx].set_title(pred_label, color=color)
-        ax.ravel()[idx].set_axis_off()
+        ax.ravel()[i].imshow(image)
+        ax.ravel()[i].set_title(class_[label])
+        ax.ravel()[i].set_axis_off()
     plt.tight_layout()
     plt.show()
 
 
-# display_test_image_grid(test_images_filepath)
+display_image_grid2(test_image_filepaths)
