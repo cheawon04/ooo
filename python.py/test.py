@@ -129,15 +129,6 @@
 # 앙꼬="귀여워"
 # print(앙꼬)
 
-# 연주="바보"
-# print("연주")
-
-# 이이= """
-# 연주,
-# 귀여워
-# """
-# print(이이) 
-
 #슬라이싱  #48분
 
 #채원 = "040319 4777777"
@@ -836,6 +827,7 @@
 # gender = "남자"
 # weight = std_weight(height / 100,gender)
 # print("키 {0}cm {1}의 표준 체중은 {2}kg 입니다.".format(height,gender,weight))
+<<<<<<< HEAD
 
 # def print_n_times(*values, n=2):
 #     for i in range(n):
@@ -844,3 +836,5 @@
 #         print()
 # print_n_times("안녕하세요","즐거운","파이썬 프로그래밍",3)
 
+=======
+>>>>>>> 0056f86aca22a8efbfc4834603a0e36c904ce91b
